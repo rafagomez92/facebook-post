@@ -1,37 +1,54 @@
-export default (io, posts, users) => socket => {
+import connection from './connection';
+import { matchHash, createToken } from './hasher'
 
-    io.emit('start', { posts, users });    
-    
-    socket.on('sendState', (text) => {      
-        const date = Date.now();
-      const data = {
-        text,
-        id: socket.id,
-        date
+export default io => socket => {
+  console.log('start sockets');
+
+  socket.on('doLogin', (data) => {    
+    connection.query('select * from users where userName = ?', [data.userName], (err, result) => {
+      if (!err) {
+        if (result.length === 1) {
+          if (matchHash(data.password, result[0].pass)) {
+            const token = createToken({
+              userName: data.userName
+            });
+
+            io.emit('successLogin', token);
+          } else {
+            console.log('failedLogin', 'invalid credentials')
+            io.emit('failedLogin', 'invalid credentials');
+          }
+        } else {
+          console.log('failedLogin', 'user not found')
+          io.emit('failedLogin', 'user not found');
+        }
+      } else {
+        console.log('failedLogin', err.message)
+        io.emit('failedLogin', err.message);
       }
-      posts.push(text);      
-      io.emit('broadcastState', data);
     });
-    
-    socket.on('sendUser', (userName) => {    
-      if (!users.find(u => u.user === userName || u.id === socket.id)) {
-        users.push({
-          id: socket.id,
-          userName
-        });
-        io.emit('broadcastUser', userName);
+  });
+
+  socket.on('sendState', (data) => {
+    connection.query('insert into states (text, userName, status) values (?, ?, ?)', [data.text, data.userName, data.status],
+    (err, result) => {
+      if(!err) {
+        io.emit('broadcastState', data);
       }
-    });
+    })            
+  });
 
-    socket.on('sendLikes', (data) => {
-        const like = users.find(u => u.user === userName);
-        const counter = 0;
-        if (like) {
-            counter++;
-        }        
-        io.emit('broadcastState', posts);
-    })
 
-}
-  
+  socket.on('sendLike', (data) => {
+    connection.query('insert into states (like) values (?)', [like+1]);
+  })
 
+  socket.on('deletePost', (data) => {
+    connection.query('update states set text="" where id = (?)', [data.id],
+    (err, result) => {
+      if(!err) {
+        io.emit('broadcastState', data);
+      }
+    })            
+  })
+};
